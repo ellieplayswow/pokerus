@@ -1,0 +1,16 @@
+[package]
+name = "pokerus"
+version = "0.1.0"
+edition = "2024"
+license = "LGPL-2"
+
+[lib]
+name = "pokerus"
+
+[dependencies]
+byteorder = "1"
+chrono = "0.4"
+
+[features]
+default = [ "write" ]
+write = []
