@@ -280,7 +280,7 @@ pub enum Badge {
                 1 => Badge::Coal,
                 2 => Badge::Forest,
                 4 => Badge::Cobble,
-                8 => Badge::Forest,
+                8 => Badge::Fen,
                 16 => Badge::Relic,
                 32 => Badge::Mine,
                 64 => Badge::Icicle,
@@ -293,7 +293,7 @@ pub enum Badge {
     impl From<u8> for Badges {
         fn from(value: u8) -> Self {
             let mut vec = Vec::new();
-            for i in 1..=7 {
+            for i in 0..=7 {
                 let exp = 2_u8.pow(i);
                 if value & exp == exp {
                     vec.push(Badge::from(exp));

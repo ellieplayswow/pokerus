@@ -1,35 +1,16 @@
 use crate::save::error::ReadError;
 use crate::save::format::dppt::{Gen4StringBuffer, Gen4StringVector};
-use crate::save::save::{Gender, SaveFile, Trainer};
-use byteorder::{LittleEndian, ReadBytesExt};
+use crate::save::save::{Gender, Pokemon, SaveFile, Trainer};
+use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use std::fs::File;
 use std::io;
-use std::io::{Seek, SeekFrom};
+use std::io::{Cursor, Read, Seek, SeekFrom, Write};
 use std::path::PathBuf;
 use chrono::{DateTime, Utc};
+use crate::save::data::species::Species;
 use crate::save::format::dppt::save::{Badges, Gen4Save, Locale, Timestamp};
 
 pub fn read_save(save_file: impl Into<PathBuf>) -> Result<Gen4Save, ReadError> {
-    fn read_u8(readable: &mut impl io::Read) -> Result<u8, ReadError> {
-        readable.read_u8().map_err(|_| ReadError::Generic)
-    }
-
-    fn read_u16(readable: &mut impl io::Read) -> Result<u16, ReadError> {
-        readable.read_u16::<LittleEndian>().map_err(|_| ReadError::Generic)
-    }
-
-    fn read_u32(readable: &mut impl io::Read) -> Result<u32, ReadError> {
-        readable.read_u32::<LittleEndian>().map_err(|_| ReadError::Generic)
-    }
-
-    fn read_string(readable: &mut impl io::Read, length: usize) -> Result<String, ReadError> {
-        let mut vec: Vec<u16> = Vec::with_capacity(length);
-        for i in 0..length {
-            vec.push(read_u16(readable)?);
-        }
-
-        Ok(String::from(Gen4StringVector(vec)))
-    }
 
     fn read_date(readable: &mut impl io::Read) -> Result<DateTime<Utc>, ReadError> {
         let timestamp = read_u32(readable)?;
@@ -66,12 +47,42 @@ pub fn read_save(save_file: impl Into<PathBuf>) -> Result<Gen4Save, ReadError> {
     let badges: Badges = read_u8(&mut save_file)?.into();
 
     let trainer = Trainer::new(trainer_name, trainer_id, Some(trainer_secret_id), trainer_gender);
-    let base_save = SaveFile::new(trainer, trainer_money);
+    let mut base_save = SaveFile::new(trainer.clone(), trainer_money);
 
     // skip to playtime
     seek(&mut save_file, SeekFrom::Start(0x8A))?;
     let playtime = (read_u16(&mut save_file)? as u32 * 3660) + (read_u8(&mut save_file)? as u32 * 60) + (read_u8(&mut save_file)? as u32);
     println!("{:?}", playtime);
+
+    seek(&mut save_file, SeekFrom::Start(0xA0))?;
+    for i in 0..6 {
+        let mut buf = vec![0u8; 236];
+        &save_file.read_exact(&mut buf);
+
+        let mut decrypted_blob = Cursor::new(decrypt_pokemon_blob(buf.clone())?);
+        seek(&mut decrypted_blob, SeekFrom::Start(0x08))?;
+        let species = read_u16(&mut decrypted_blob)?;
+        if species == 0 {
+            continue;
+        }
+        
+        let species = Species::from(species);
+        let held_item = read_u16(&mut decrypted_blob)?;
+        let original_trainer_id = read_u16(&mut decrypted_blob)?;
+        let original_secret_id = read_u16(&mut decrypted_blob)?;
+        let mut pkmn = Pokemon::new(species);
+        
+        seek(&mut decrypted_blob, SeekFrom::Start(0x48))?;
+        let pokemon_name = read_string(&mut decrypted_blob, 20)?;
+        pkmn.set_name(pokemon_name);
+        
+        if (original_trainer_id == trainer_id && original_secret_id == trainer_secret_id) {
+            pkmn.set_trainer(trainer.clone());
+        }
+        
+        base_save.party.push(pkmn);
+    }
+
     Ok(Gen4Save {
         save_started: start_date,
         hall_of_fame_entered: hof_date,
@@ -79,6 +90,116 @@ pub fn read_save(save_file: impl Into<PathBuf>) -> Result<Gen4Save, ReadError> {
         locale,
         badges: badges.0,
     })
+}
+
+fn read_u8(readable: &mut impl io::Read) -> Result<u8, ReadError> {
+    readable.read_u8().map_err(|_| ReadError::Generic)
+}
+
+fn read_u16(readable: &mut impl io::Read) -> Result<u16, ReadError> {
+    readable.read_u16::<LittleEndian>().map_err(|_| ReadError::Generic)
+}
+
+fn read_u32(readable: &mut impl io::Read) -> Result<u32, ReadError> {
+    readable.read_u32::<LittleEndian>().map_err(|_| ReadError::Generic)
+}
+
+fn read_string(readable: &mut impl io::Read, length: usize) -> Result<String, ReadError> {
+    let mut vec: Vec<u16> = Vec::with_capacity(length);
+    for i in 0..length {
+        vec.push(read_u16(readable)?);
+    }
+
+    Ok(String::from(Gen4StringVector(vec)))
+}
+
+fn decrypt_pokemon_blob(blob: Vec<u8>) -> Result<Vec<u8>, ReadError> {
+    let blob_len = blob.len();
+    let num_words = (blob_len - 8) / 2;
+    let is_party = blob_len == 236;
+
+    let mut cursor = Cursor::new(blob);
+
+    let pv = read_u32(&mut cursor)?;
+    let flags = read_u16(&mut cursor)?;
+    let checksum = read_u16(&mut cursor)?;
+    let shift = (pv >> 13) & 31;
+
+    let mut decrypted_blob: Vec<u16> = Vec::with_capacity(num_words);
+
+    let mut prng: u32 = checksum as u32;
+    for i in 0..num_words {
+        prng = u32::wrapping_mul(0x41C64E6D, prng) + 0x00006073;
+        let mut xor: u16 = (prng >> 16) as u16;
+
+        #[cfg(target_endian = "big")]
+        {
+            xor = xor.to_le();
+        }
+
+        let word = read_u16(&mut cursor)?;
+        decrypted_blob.push(word ^ xor);
+    }
+
+    // now shuffle
+    let num_blocks = 4;
+    let idx = shift * 4;
+    let block_positions: [u8; 128] = [
+        0, 1, 2, 3,
+        0, 1, 3, 2,
+        0, 2, 1, 3,
+        0, 3, 1, 2,
+        0, 2, 3, 1,
+        0, 3, 2, 1,
+        1, 0, 2, 3,
+        1, 0, 3, 2,
+        2, 0, 1, 3,
+        3, 0, 1, 2,
+        2, 0, 3, 1,
+        3, 0, 2, 1,
+        1, 2, 0, 3,
+        1, 3, 0, 2,
+        2, 1, 0, 3,
+        3, 1, 0, 2,
+        2, 3, 0, 1,
+        3, 2, 0, 1,
+        1, 2, 3, 0,
+        1, 3, 2, 0,
+        2, 1, 3, 0,
+        3, 1, 2, 0,
+        2, 3, 1, 0,
+        3, 2, 1, 0,
+
+        // duplicates of 0-7 to eliminate modulus
+        0, 1, 2, 3,
+        0, 1, 3, 2,
+        0, 2, 1, 3,
+        0, 3, 1, 2,
+        0, 2, 3, 1,
+        0, 3, 2, 1,
+        1, 0, 2, 3,
+        1, 0, 3, 2,
+    ];
+
+    let res: Vec<u8> = Vec::with_capacity(blob_len);
+    let mut res_cursor = Cursor::new(res);
+    res_cursor.write_u32::<LittleEndian>(pv).map_err(|_| ReadError::Generic)?;
+    res_cursor.write_u16::<LittleEndian>(flags).map_err(|_| ReadError::Generic)?;
+    res_cursor.write_u16::<LittleEndian>(checksum).map_err(|_| ReadError::Generic)?;
+
+    let start_pos: usize = 0;
+    for i in 0..num_blocks {
+        let src_idx = start_pos + (16 * block_positions[(idx + i) as usize]) as usize;
+        let src_blob: &[u16] = &decrypted_blob[src_idx..(src_idx + 16)];
+        src_blob.iter().for_each(|&x| res_cursor.write_u16::<LittleEndian>(x).unwrap());
+    }
+
+    if is_party {
+        let party_blob = &decrypted_blob[64..];
+        party_blob.iter().for_each(|&x| res_cursor.write_u16::<LittleEndian>(x).unwrap());
+    }
+
+    Ok(res_cursor.into_inner())
 }
 
 #[cfg(test)]
