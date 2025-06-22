@@ -14,7 +14,7 @@ use crate::save::format::dppt::save::{Badges, Gen4Save, Locale, Timestamp};
 pub fn read_save(save_file: impl Into<PathBuf>) -> Result<Gen4Save, ReadError> {
 
     fn read_date(readable: &mut impl io::Read) -> Result<DateTime<Utc>, ReadError> {
-        let timestamp = read_u32(readable)?;
+        let timestamp = read_i64(readable)?;
         Ok(Timestamp(timestamp).into())
     }
 
@@ -27,12 +27,42 @@ pub fn read_save(save_file: impl Into<PathBuf>) -> Result<Gen4Save, ReadError> {
         Err(_e) => return Err(ReadError::FileNotFound)
     };
 
-    // get start date & HOF date
-    seek(&mut save_file, SeekFrom::Start(0x34))?;
-    let start_date: DateTime<Utc> = read_date(&mut save_file)?;
-    seek(&mut save_file, SeekFrom::Current(0x04))?;  // skip 4 bytes
-    let hof_date: DateTime<Utc> = read_date(&mut save_file)?;
+    // SYSTEM BLOCK
+    seek(&mut save_file, SeekFrom::Start(0x00))?;
+    let _rtc_offset = read_i64(&mut save_file)?;
+    let mut _mac_address = vec![0u8; 6];
+    &save_file.read_exact(&mut _mac_address);
 
+    let _owner_month = read_u8(&mut save_file)?;
+    let _owner_date = read_u8(&mut save_file)?;
+    let _canary = read_u32(&mut save_file)?;
+
+    let _rtc_year = read_u32(&mut save_file)?;
+    let _rtc_month = read_u32(&mut save_file)?;
+    let _rtc_date = read_u32(&mut save_file)?;
+    let _rtc_weekday = read_u32(&mut save_file)?;
+
+    let _rtc_hour = read_u32(&mut save_file)?;
+    let _rtc_minute = read_u32(&mut save_file)?;
+    let _rtc_second = read_u32(&mut save_file)?;
+
+    let _day = read_u32(&mut save_file)?;
+
+
+    // PLAYER BLOCK
+    let start_date: DateTime<Utc> = read_date(&mut save_file)?;
+    let hof_date: DateTime<Utc> = read_date(&mut save_file)?;
+    
+    let _save_penalty = read_u32(&mut save_file)?;
+    let _mystery_gift_unlocked = read_u8(&mut save_file)?;
+
+    seek(&mut save_file, SeekFrom::Current(0x03))?; // padding_49
+    
+    let _network_id = read_i32(&mut save_file)?;
+
+    seek(&mut save_file, SeekFrom::Current(0x0C))?; // unused_50
+    
+    
     seek(&mut save_file, SeekFrom::Start(0x68))?;
     let trainer_name = read_string(&mut save_file, 8)?;
 
@@ -162,6 +192,14 @@ fn read_u16(readable: &mut impl io::Read) -> Result<u16, ReadError> {
 
 fn read_u32(readable: &mut impl io::Read) -> Result<u32, ReadError> {
     readable.read_u32::<LittleEndian>().map_err(|_| ReadError::Generic)
+}
+
+fn read_i64(readable: &mut impl io::Read) -> Result<i64, ReadError> {
+    readable.read_i64::<LittleEndian>().map_err(|_| ReadError::Generic)
+}
+
+fn read_i32(readable: &mut impl io::Read) -> Result<i32, ReadError> {
+    readable.read_i32::<LittleEndian>().map_err(|_| ReadError::Generic)
 }
 
 fn read_string(readable: &mut impl io::Read, length: usize) -> Result<String, ReadError> {

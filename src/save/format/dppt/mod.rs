@@ -226,13 +226,13 @@ mod save {
     use chrono::{DateTime, Utc};
     use crate::save::save::SaveFile;
 
-    pub const EPOCH: u32 = 946684800;
+    pub const EPOCH: i64 = 946684800;
 
-    pub(crate) struct Timestamp(pub u32);
+    pub(crate) struct Timestamp(pub i64);
 
     impl Into<DateTime<Utc>> for Timestamp {
         fn into(self) -> DateTime<Utc> {
-            DateTime::from_timestamp((EPOCH + self.0) as i64, 0).expect("Invalid timestamp")
+            DateTime::from_timestamp(EPOCH + self.0, 0).expect("Invalid timestamp")
         }
     }
 
