@@ -1,12 +1,13 @@
 use crate::save::error::ReadError;
-use crate::save::format::dppt::{Gen4StringBuffer, Gen4StringVector};
+use crate::save::format::dppt::Gen4StringVector;
 use crate::save::save::{Gender, Pokemon, SaveFile, Trainer};
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use std::fs::File;
 use std::io;
-use std::io::{Cursor, Read, Seek, SeekFrom, Write};
+use std::io::{Cursor, Read, SeekFrom};
 use std::path::PathBuf;
 use chrono::{DateTime, Utc};
+use crate::save::data::dppt::item::DPPTItem;
 use crate::save::data::species::Species;
 use crate::save::format::dppt::save::{Badges, Gen4Save, Locale, Timestamp};
 
@@ -55,7 +56,7 @@ pub fn read_save(save_file: impl Into<PathBuf>) -> Result<Gen4Save, ReadError> {
     println!("{:?}", playtime);
 
     seek(&mut save_file, SeekFrom::Start(0xA0))?;
-    for i in 0..6 {
+    for _i in 0..6 {
         let mut buf = vec![0u8; 236];
         &save_file.read_exact(&mut buf);
 
@@ -76,12 +77,71 @@ pub fn read_save(save_file: impl Into<PathBuf>) -> Result<Gen4Save, ReadError> {
         let pokemon_name = read_string(&mut decrypted_blob, 20)?;
         pkmn.set_name(pokemon_name);
         
-        if (original_trainer_id == trainer_id && original_secret_id == trainer_secret_id) {
+        if original_trainer_id == trainer_id && original_secret_id == trainer_secret_id {
             pkmn.set_trainer(trainer.clone());
         }
         
         base_save.party.push(pkmn);
     }
+
+    seek(&mut save_file, SeekFrom::Start(0x00630))?;
+    for _i in 0..(165+50+100+40+64+15+13+12) {
+        // @todo: skip offsets when reaching a None item
+        let item_id = read_u16(&mut save_file)?;
+        let qty = read_u16(&mut save_file)?;
+
+        let item = DPPTItem::from(item_id);
+        base_save.add_item(item, qty);
+    }
+
+    seek(&mut save_file, SeekFrom::Start(0x0CF2C))?;
+    println!("current_box: {:?}", read_u32(&mut save_file)?); // current_box?
+    let mut boxes: Vec<crate::save::save::Box> = Vec::with_capacity(18);
+    for _i in 0..18 {
+        let mut pkmn_box = crate::save::save::Box::new(30);
+        for _j in 0..30 {
+            let mut buf = vec![0u8; 136];
+            &save_file.read_exact(&mut buf);
+
+            let mut decrypted_blob = Cursor::new(decrypt_pokemon_blob(buf.clone())?);
+            seek(&mut decrypted_blob, SeekFrom::Start(0x08))?;
+            let species = read_u16(&mut decrypted_blob)?;
+            if species == 0 {
+                continue;
+            }
+
+            let species = Species::from(species);
+            let held_item = read_u16(&mut decrypted_blob)?;
+            let original_trainer_id = read_u16(&mut decrypted_blob)?;
+            let original_secret_id = read_u16(&mut decrypted_blob)?;
+            let mut pkmn = Pokemon::new(species);
+
+            seek(&mut decrypted_blob, SeekFrom::Start(0x48))?;
+            let pokemon_name = read_string(&mut decrypted_blob, 20)?;
+            pkmn.set_name(pokemon_name);
+
+            if original_trainer_id == trainer_id && original_secret_id == trainer_secret_id {
+                pkmn.set_trainer(trainer.clone());
+            }
+
+            pkmn_box.set_pkmn(_j, pkmn);
+        }
+        boxes.push(pkmn_box);
+    }
+
+    // box names
+    for i in 0..boxes.len() {
+        let current_box: &mut crate::save::save::Box = boxes.get_mut(i).unwrap();
+        (*current_box).set_name(read_string(&mut save_file, 20)?);
+    }
+
+    // box wallpapers
+    for i in 0..boxes.len() {
+        let current_box: &mut crate::save::save::Box = boxes.get_mut(i).unwrap();
+        (*current_box).set_wallpaper(read_u8(&mut save_file)?);
+    }
+
+    base_save.boxes = boxes;
 
     Ok(Gen4Save {
         save_started: start_date,
@@ -106,7 +166,7 @@ fn read_u32(readable: &mut impl io::Read) -> Result<u32, ReadError> {
 
 fn read_string(readable: &mut impl io::Read, length: usize) -> Result<String, ReadError> {
     let mut vec: Vec<u16> = Vec::with_capacity(length);
-    for i in 0..length {
+    for _i in 0..length {
         vec.push(read_u16(readable)?);
     }
 
@@ -128,7 +188,7 @@ fn decrypt_pokemon_blob(blob: Vec<u8>) -> Result<Vec<u8>, ReadError> {
     let mut decrypted_blob: Vec<u16> = Vec::with_capacity(num_words);
 
     let mut prng: u32 = checksum as u32;
-    for i in 0..num_words {
+    for _i in 0..num_words {
         prng = u32::wrapping_mul(0x41C64E6D, prng) + 0x00006073;
         let mut xor: u16 = (prng >> 16) as u16;
 
