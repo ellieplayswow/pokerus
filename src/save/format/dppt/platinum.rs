@@ -52,18 +52,34 @@ pub fn read_save(save_file: impl Into<PathBuf>) -> Result<Gen4Save, ReadError> {
     // PLAYER BLOCK
     let start_date: DateTime<Utc> = read_date(&mut save_file)?;
     let hof_date: DateTime<Utc> = read_date(&mut save_file)?;
-    
+
     let _save_penalty = read_u32(&mut save_file)?;
     let _mystery_gift_unlocked = read_u8(&mut save_file)?;
 
     seek(&mut save_file, SeekFrom::Current(0x03))?; // padding_49
-    
+
     let _network_id = read_i32(&mut save_file)?;
 
     seek(&mut save_file, SeekFrom::Current(0x0C))?; // unused_50
+
+    seek(&mut save_file, SeekFrom::Current(0x08))?; // skip 8 bytes... why?
+
+    let _options = read_u16(&mut save_file)?;
+    let _opts_frame
+        = (_options & 0b0_1111_00_0_0_00_0000) >> 10;
+    let _opts_button_mode
+        = (_options & 0b0_0000_11_0_0_00_0000) >> 8;
+    let _opts_battle_scene
+        = (_options & 0b0_0000_00_1_0_00_0000) >> 7;
+    let _opts_battle_style
+        = (_options & 0b0_0000_00_0_1_00_0000) >> 6;
+    let _opts_sound_mode
+        = (_options & 0b0_0000_00_0_0_11_0000) >> 4;
+    let _opts_text_speed
+        = _options & 0b0_0000_00_0_0_00_1111;
+
+    seek(&mut save_file, SeekFrom::Current(0x02))?; // padding_02
     
-    
-    seek(&mut save_file, SeekFrom::Start(0x68))?;
     let trainer_name = read_string(&mut save_file, 8)?;
 
     let trainer_id = read_u16(&mut save_file)?;
