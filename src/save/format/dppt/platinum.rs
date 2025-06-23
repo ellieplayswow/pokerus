@@ -11,6 +11,8 @@ use crate::save::data::dppt::item::DPPTItem;
 use crate::save::data::species::Species;
 use crate::save::format::dppt::save::{Badges, Gen4Save, Locale, Timestamp};
 
+const PADDING_BETWEEN_ENTRIES: i64 = 0x08;
+
 pub fn read_save(save_file: impl Into<PathBuf>) -> Result<Gen4Save, ReadError> {
 
     fn read_date(readable: &mut impl io::Read) -> Result<DateTime<Utc>, ReadError> {
@@ -62,7 +64,7 @@ pub fn read_save(save_file: impl Into<PathBuf>) -> Result<Gen4Save, ReadError> {
 
     seek(&mut save_file, SeekFrom::Current(0x0C))?; // unused_50
 
-    seek(&mut save_file, SeekFrom::Current(0x08))?; // skip 8 bytes... why?
+    seek(&mut save_file, SeekFrom::Current(PADDING_BETWEEN_ENTRIES))?;
 
     let _options = read_u16(&mut save_file)?;
     let _opts_frame
@@ -96,10 +98,22 @@ pub fn read_save(save_file: impl Into<PathBuf>) -> Result<Gen4Save, ReadError> {
     let trainer = Trainer::new(trainer_name, trainer_id, Some(trainer_secret_id), trainer_gender);
     let mut base_save = SaveFile::new(trainer.clone(), trainer_money);
 
-    // skip to playtime
-    seek(&mut save_file, SeekFrom::Start(0x8A))?;
+    let _appearance = read_u8(&mut save_file)?;
+    let _game_code = read_u8(&mut save_file)?; // @todo: can we assert this is valid?
+    let _postgame_flags = read_u8(&mut save_file)?; // isMainStoryCleared, hasNationalDex
+
     let playtime = (read_u16(&mut save_file)? as u32 * 3660) + (read_u8(&mut save_file)? as u32 * 60) + (read_u8(&mut save_file)? as u32);
     println!("{:?}", playtime);
+
+    seek(&mut save_file, SeekFrom::Current(0x02))?; // padding_04
+
+    seek(&mut save_file, SeekFrom::Current(PADDING_BETWEEN_ENTRIES))?;
+
+    // PARTY BLOCK
+    let _max_party_count = read_u8(&mut save_file)?;
+    seek(&mut save_file, SeekFrom::Current(0x03))?;
+    let _number_in_party = read_u8(&mut save_file)?;
+    seek(&mut save_file, SeekFrom::Current(0x03))?;
 
     seek(&mut save_file, SeekFrom::Start(0xA0))?;
     for _i in 0..6 {
@@ -130,6 +144,7 @@ pub fn read_save(save_file: impl Into<PathBuf>) -> Result<Gen4Save, ReadError> {
         base_save.party.push(pkmn);
     }
 
+    // BAG BLOCK
     seek(&mut save_file, SeekFrom::Start(0x00630))?;
     for _i in 0..(165+50+100+40+64+15+13+12) {
         // @todo: skip offsets when reaching a None item
