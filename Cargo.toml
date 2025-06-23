@@ -10,6 +10,7 @@ name = "pokerus"
 [dependencies]
 byteorder = "1"
 chrono = "0.4"
+pokerus_macro = { path = "./pokerus_macro" }
 
 [features]
 default = [ "write" ]

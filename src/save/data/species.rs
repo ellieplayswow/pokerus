@@ -1811,3 +1811,9 @@ impl From<u16> for Species {
         }
     }
 }
+
+impl Into<u16> for Species {
+	fn into(self) -> u16 {
+		self as u16
+	}
+}

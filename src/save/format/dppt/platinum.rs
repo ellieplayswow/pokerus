@@ -327,6 +327,8 @@ fn decrypt_pokemon_blob(blob: Vec<u8>) -> Result<Vec<u8>, ReadError> {
         let party_blob = &decrypted_blob[64..];
         party_blob.iter().for_each(|&x| res_cursor.write_u16::<LittleEndian>(x).unwrap());
     }
+    
+    crate::save::data::dppt::enums::Vars::VAR_AMITY_SQUARE_GIFT_ID;
 
     Ok(res_cursor.into_inner())
 }
