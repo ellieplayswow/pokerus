@@ -33,7 +33,7 @@ pub fn read_save(save_file: impl Into<PathBuf>) -> Result<Gen4Save, ReadError> {
     seek(&mut save_file, SeekFrom::Start(0x00))?;
     let _rtc_offset = read_i64(&mut save_file)?;
     let mut _mac_address = vec![0u8; 6];
-    &save_file.read_exact(&mut _mac_address);
+    let _ = &save_file.read_exact(&mut _mac_address);
 
     let _owner_month = read_u8(&mut save_file)?;
     let _owner_date = read_u8(&mut save_file)?;
@@ -118,7 +118,7 @@ pub fn read_save(save_file: impl Into<PathBuf>) -> Result<Gen4Save, ReadError> {
     seek(&mut save_file, SeekFrom::Start(0xA0))?;
     for _i in 0..6 {
         let mut buf = vec![0u8; 236];
-        &save_file.read_exact(&mut buf);
+        let _ = &save_file.read_exact(&mut buf);
 
         let mut decrypted_blob = Cursor::new(decrypt_pokemon_blob(buf.clone())?);
         seek(&mut decrypted_blob, SeekFrom::Start(0x08))?;
@@ -128,7 +128,7 @@ pub fn read_save(save_file: impl Into<PathBuf>) -> Result<Gen4Save, ReadError> {
         }
         
         let species = Species::from(species);
-        let held_item = read_u16(&mut decrypted_blob)?;
+        let _held_item = read_u16(&mut decrypted_blob)?;
         let original_trainer_id = read_u16(&mut decrypted_blob)?;
         let original_secret_id = read_u16(&mut decrypted_blob)?;
         let mut pkmn = Pokemon::new(species);
@@ -162,7 +162,7 @@ pub fn read_save(save_file: impl Into<PathBuf>) -> Result<Gen4Save, ReadError> {
         let mut pkmn_box = crate::save::save::Box::new(30);
         for _j in 0..30 {
             let mut buf = vec![0u8; 136];
-            &save_file.read_exact(&mut buf);
+            let _ = &save_file.read_exact(&mut buf);
 
             let mut decrypted_blob = Cursor::new(decrypt_pokemon_blob(buf.clone())?);
             seek(&mut decrypted_blob, SeekFrom::Start(0x08))?;
@@ -172,7 +172,7 @@ pub fn read_save(save_file: impl Into<PathBuf>) -> Result<Gen4Save, ReadError> {
             }
 
             let species = Species::from(species);
-            let held_item = read_u16(&mut decrypted_blob)?;
+            let _held_item = read_u16(&mut decrypted_blob)?;
             let original_trainer_id = read_u16(&mut decrypted_blob)?;
             let original_secret_id = read_u16(&mut decrypted_blob)?;
             let mut pkmn = Pokemon::new(species);
@@ -203,6 +203,14 @@ pub fn read_save(save_file: impl Into<PathBuf>) -> Result<Gen4Save, ReadError> {
     }
 
     base_save.boxes = boxes;
+
+    // can we get starter pokemon?
+    let var_idx: u16 = crate::save::data::dppt::enums::Vars::VAR_PLAYER_STARTER.into();
+    //0xDAC
+
+    seek(&mut save_file, SeekFrom::Start(0xDAC))?;
+    seek(&mut save_file, SeekFrom::Current(((var_idx - 16384) * 2) as i64))?;
+    println!("starter: {:?}", Species::from(read_u16(&mut save_file)?));
 
     Ok(Gen4Save {
         save_started: start_date,
@@ -327,8 +335,6 @@ fn decrypt_pokemon_blob(blob: Vec<u8>) -> Result<Vec<u8>, ReadError> {
         let party_blob = &decrypted_blob[64..];
         party_blob.iter().for_each(|&x| res_cursor.write_u16::<LittleEndian>(x).unwrap());
     }
-    
-    crate::save::data::dppt::enums::Vars::VAR_AMITY_SQUARE_GIFT_ID;
 
     Ok(res_cursor.into_inner())
 }

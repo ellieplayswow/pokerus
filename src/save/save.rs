@@ -165,7 +165,7 @@ impl Trainer {
 }
 
 impl Box {
-    pub fn new(box_size: usize) -> Self {
+    pub fn new(_box_size: usize) -> Self {
         Self {
             name: String::new(),
             pokemon: HashMap::new(),
