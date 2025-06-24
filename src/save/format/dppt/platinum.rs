@@ -206,7 +206,6 @@ pub fn read_save(save_file: impl Into<PathBuf>) -> Result<Gen4Save, ReadError> {
 
     // can we get starter pokemon?
     let var_idx: u16 = crate::save::data::dppt::enums::Vars::VAR_PLAYER_STARTER.into();
-    //0xDAC
 
     seek(&mut save_file, SeekFrom::Start(0xDAC))?;
     seek(&mut save_file, SeekFrom::Current(((var_idx - 16384) * 2) as i64))?;

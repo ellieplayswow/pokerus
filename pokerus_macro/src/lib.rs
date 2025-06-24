@@ -34,6 +34,7 @@ mod metang {
     }
 }
 
+
 fn read_meta_file(file_path: String) -> File {
     let path = if let Some(manifest_dir) = std::env::var_os("CARGO_MANIFEST_DIR") {
         let mut buf = PathBuf::from(manifest_dir);
@@ -51,6 +52,30 @@ fn read_meta_file(file_path: String) -> File {
     file
 }
 
+/// Generate an enum based off of a [metang] definition file.
+///
+/// ## Example Usage
+/// Assuming `enum.txt` exists with the content:
+/// ```text
+/// OPTION_ONE = 42
+/// OPTION_TWO
+/// OPTION_THREE
+/// OPTION_FOUR = 44
+/// ```
+///
+/// You can generate an enum:
+///
+/// ```rust,ignore
+/// metang_enum!("./enum.txt", u16, MyEnum);
+///
+/// assert_eq!(MyEnum::from(42), MyEnum::OPTION_ONE);
+/// assert_eq!(MyEnum::OPTION_TWO.into(), 43);
+/// 
+/// // OPTION_THREE is the canonical option for 44
+/// assert_eq!(MyEnum::from(44), MyEnum::OPTION_THREE);
+/// ```
+///
+/// [metang]: https://github.com/lhearachel/metang
 #[proc_macro]
 pub fn metang_enum(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = parse_macro_input!(input as metang::MetangEnumInput);
