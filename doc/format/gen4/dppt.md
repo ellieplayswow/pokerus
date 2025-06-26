@@ -209,7 +209,60 @@ flag_value := ((1 << bit_offset) & memory[byte_offset]) > 0
 
 ### Overworld Player State Data
 
-@todo
+**Offset**: 0x1280
+
+**Length**: 0x00A0
+
+| Offset | Length (bytes) | Type                         | Contents                      | Notes                                         | Example |
+|--------|----------------|------------------------------|-------------------------------|-----------------------------------------------|---------|
+| 0x00   | 20             | `location`                   | Player location               |                                               |         |
+| 0x14   | 20             | `location`                   | Entrance location             |                                               |         |
+| 0x28   | 20             | `location`                   | Previous location             |                                               |         |
+| 0x3C   | 20             | `location`                   | Special location              |                                               |         |
+| 0x50   | 20             | `location`                   | Exit location                 |                                               |         |
+| 0x64   | 2              | `u16`                        | Background music              |                                               |         |
+| 0x66   | 2              | `u16`                        | Weather                       |                                               |         |
+| 0x68   | 2              | `u16`                        | Warp ID                       |                                               |         |
+| 0x6A   | 1              | `u8`                         | Camera type                   |                                               |         |
+| 0x6B   | 1              |                              | **Padding**                   |                                               |         |
+| 0x6C   | 4              | `i32`                        | Overworld map history pointer |                                               |         |
+| 0x70   | 1              | `u8`                         | Overworld map X               |                                               |         |
+| 0x71   | 1              | `u8`                         | Overworld map Z               |                                               |         |
+| 0x72   | 24             | `OverworldMapHistoryItem[6]` | Overworld map history         |                                               |         |
+| 0x8A   | 2              |                              | **Padding**                   |                                               |         |
+| 0x8C   | 8              | `PlayerData`                 | Player Data                   |                                               |         |
+| 0x94   | 2              | `u16`                        | Poison Steps                  |                                               |         |
+| 0x96   | 2              | `u16`                        | Safari Steps                  |                                               |         |
+| 0x98   | 2              | `u16`                        | Safari Balls                  | This can be `1` even when not in safari zone? |         |
+| 0x9A   | 6              |                              | **Padding**                   |                                               |         |
+
+#### Location
+
+| Offset | Length (bytes) | Type  | Contents       |
+|--------|----------------|-------|----------------|
+| 0x00   | 4              | `i32` | Map ID         |
+| 0x04   | 4              | `i32` | Warp ID        |
+| 0x08   | 4              | `i32` | x              |
+| 0x0C   | 4              | `i32` | z              |
+| 0x10   | 4              | `i32` | Face direction |
+
+#### OverworldMapHistoryItem
+
+| Offset | Length (bytes) | Type  | Contents         |
+|--------|----------------|-------|------------------|
+| 0x00   | 1              | `u8`  | Map X            |
+| 0x01   | 1              | `u8`  | Map Z            |
+| 0x02   | 1              | `u8`  | Facing Direction |
+| 0x03   | 1              | `u8`  | Unused           |
+
+
+#### PlayerData
+
+| Offset | Length (bytes) | Type  | Contents              |
+|--------|----------------|-------|-----------------------|
+| 0x00   | 2              | `u16` | Cycling Gear          |
+| 0x02   | 2              | `u16` | Running Shoes Enabled |
+| 0x04   | 4              | `u32` | Form                  |
 
 ### Pokedex Data
 
